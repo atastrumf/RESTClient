@@ -19,12 +19,19 @@ package helper.util;
 import helper.util.RESTClientResponseHandler.FailStatus;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.*;
+import java.util.List;
+
 import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.params.HttpConnectionParams;
+import org.apache.http.params.HttpParams;
 import org.apache.http.util.EntityUtils;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -53,6 +60,11 @@ public class RESTClient extends AsyncTask<URI, Void, Void> {
 	public Context _context;
 	
 	/**
+	 * Optional/additional parameters send along request. Must be set from calling activity.
+	 */
+	public List<NameValuePair> _params;
+	
+	/**
 	 * Main method for server request. Depending on call status, the callback methods are
 	 * invoked.
 	 * @param URI full address from which we need to get response.
@@ -66,10 +78,18 @@ public class RESTClient extends AsyncTask<URI, Void, Void> {
     	}
     	
     	HttpClient httpclient = new DefaultHttpClient();
-		HttpGet httpget = new HttpGet(uris[0]);
+    	final HttpParams httpParameters = httpclient.getParams();
+
+    	int connectionTimeOutSec = 1;
+		HttpConnectionParams.setConnectionTimeout(httpParameters, connectionTimeOutSec * 1000);
+    	int socketTimeoutSec = 2;
+		HttpConnectionParams.setSoTimeout        (httpParameters, socketTimeoutSec * 1000);
+    	
+		HttpPost httppost = new HttpPost(uris[0]);
+		addParameters(httppost);
 		try {
 			// start http request
-			HttpResponse response = httpclient.execute(httpget);
+			HttpResponse response = httpclient.execute(httppost);
 			// get response string
 			String responseData = EntityUtils.toString(response.getEntity());
 			JSONObject responseJSON = responseToJSONObject(responseData);
@@ -122,5 +142,19 @@ public class RESTClient extends AsyncTask<URI, Void, Void> {
 							+ e.getMessage());
 		}
 		return _jsonObject;
+	}
+	
+	/**
+	 * Helper function for adding parameters to request.
+	 */
+	private void addParameters(HttpPost post)
+	{
+		if(_params == null) return;
+		
+		try {
+			post.setEntity(new UrlEncodedFormEntity(_params));
+		} catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+		}
 	}
 }
