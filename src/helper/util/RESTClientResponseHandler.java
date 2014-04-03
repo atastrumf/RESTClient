@@ -16,8 +16,6 @@
 
 package helper.util;
 
-import org.json.JSONObject;
-
 /**
  * Interface for RESTClient callback methods. For successful usage of RESTClient you
  * need to override methods and send RESTClient instance of this class.
@@ -40,7 +38,7 @@ public interface RESTClientResponseHandler {
 	 * does not matter).
 	 * @param Response data returned by request in JSON format.
 	 */
-	public void onSuccess(JSONObject responseData);
+	public void onSuccess(Object responseData);
 	
 	/**
 	 * Callback method that is called when request did not finish or there was any other

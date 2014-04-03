@@ -28,18 +28,25 @@ import org.apache.http.NameValuePair;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
+import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.params.HttpConnectionParams;
 import org.apache.http.params.HttpParams;
+import org.apache.http.protocol.HTTP;
 import org.apache.http.util.EntityUtils;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.*;
+import android.util.Log;
 
 /**
  * Class implements basic asynchronous REST client.
@@ -65,6 +72,12 @@ public class RESTClient extends AsyncTask<URI, Void, Void> {
 	public List<NameValuePair> _params;
 	
 	/**
+	 * Optional parameter that determines what kind of HTTP request method will be used.
+	 * Possible values: GET, POST
+	 */
+	public String _methodType = "GET";
+	
+	/**
 	 * Main method for server request. Depending on call status, the callback methods are
 	 * invoked.
 	 * @param URI full address from which we need to get response.
@@ -80,24 +93,46 @@ public class RESTClient extends AsyncTask<URI, Void, Void> {
     	HttpClient httpclient = new DefaultHttpClient();
     	final HttpParams httpParameters = httpclient.getParams();
 
-    	int connectionTimeOutSec = 1;
+    	int connectionTimeOutSec = 10;
 		HttpConnectionParams.setConnectionTimeout(httpParameters, connectionTimeOutSec * 1000);
-    	int socketTimeoutSec = 2;
+    	int socketTimeoutSec = 10;
 		HttpConnectionParams.setSoTimeout        (httpParameters, socketTimeoutSec * 1000);
     	
-		HttpPost httppost = new HttpPost(uris[0]);
-		addParameters(httppost);
-		try {
-			// start http request
-			HttpResponse response = httpclient.execute(httppost);
-			// get response string
-			String responseData = EntityUtils.toString(response.getEntity());
-			JSONObject responseJSON = responseToJSONObject(responseData);
-			if(responseJSON == null) {
-				_handler.onFailure(FailStatus.JSONException);
+		HttpRequestBase httpRequest = null;
+		if(_methodType == "GET") {
+			// check if we have any params
+			if(_params != null) {
+				String paramString = URLEncodedUtils.format(_params, "utf-8");
+				httpRequest = new HttpGet(uris[0] + "?" + paramString);
+				Log.d("request", uris[0] + "?" + paramString);
 			}
 			else {
-				_handler.onSuccess(responseJSON);
+				httpRequest = new HttpGet(uris[0]);
+				Log.d("request", uris[0].toString());
+			}
+		}
+		else {
+			httpRequest = new HttpPost(uris[0]);
+			if(_params != null) {
+				Log.d("request", uris[0].toString());
+				addPostParameters(httpRequest);
+			}
+		}
+		httpRequest.setHeader("Accept", "application/json");
+		httpRequest.setHeader("Content-Type", "application/json");
+		try {
+			// start http request
+			HttpResponse response = httpclient.execute(httpRequest);
+			// get response string
+			String responseData = EntityUtils.toString(response.getEntity(), HTTP.UTF_8);
+			
+			// determine response type(json array or object)
+			Object json = null;
+			try {
+				json = new JSONTokener(responseData).nextValue();
+				_handler.onSuccess(json);
+			} catch (JSONException e) {
+				_handler.onFailure(FailStatus.JSONException);
 			}
 		} catch (ClientProtocolException e) {
 			System.out.println("AsyncTask:GetUserDataThread:ClientProtocolException: "
@@ -138,21 +173,37 @@ public class RESTClient extends AsyncTask<URI, Void, Void> {
 		try {
 			_jsonObject = new JSONObject(responseData);
 		} catch (JSONException e) {
-			System.out.println("AsyncTask:UserLoginThread:JSONException: "
+			System.out.println("AsyncTask:JSONException: "
 							+ e.getMessage());
 		}
 		return _jsonObject;
 	}
 	
 	/**
-	 * Helper function for adding parameters to request.
+	 * Helper function for string to JSONArray parsing.
+	 * @param string that needs to be parsed
+	 * @return JSONArray representation of given string
 	 */
-	private void addParameters(HttpPost post)
+	private JSONArray responseToJSONArray(String responseData) {
+		JSONArray _jsonArray = null;
+		try {
+			_jsonArray = new JSONArray(responseData);
+		} catch (JSONException e) {
+			System.out.println("AsyncTask:JSONException: "
+							+ e.getMessage());
+		}
+		return _jsonArray;
+	}
+	
+	/**
+	 * Helper function for adding POST parameters to request.
+	 */
+	private void addPostParameters(HttpRequestBase httpRequest)
 	{
 		if(_params == null) return;
 		
 		try {
-			post.setEntity(new UrlEncodedFormEntity(_params));
+			((HttpPost) httpRequest).setEntity(new UrlEncodedFormEntity(_params));
 		} catch (UnsupportedEncodingException e) {
 			e.printStackTrace();
 		}
